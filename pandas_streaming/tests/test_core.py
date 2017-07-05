@@ -84,3 +84,33 @@ def test_arithmetic():
 
     assert assert_eq(L1[0], df + 1)
     assert assert_eq(L2[0], (df + 1).x * 10)
+
+
+@pytest.mark.xfail(reason='need to zip two streaming dataframes together')
+def test_pair_arithmetic():
+    df = pd.DataFrame({'x': list(range(10)), 'y': [1] * 10})
+
+    a = StreamingDataFrame(example=df.iloc[0])
+    L = ((a.x + a.y) * 2).sink_to_list()
+
+    a.emit(df.iloc[:5])
+    a.emit(df.iloc[5:])
+
+    assert len(L) == 2
+    assert_eq(pd.concat(L, axis=0), (df.x + df.y) * 2)
+
+
+def test_groupby_sum():
+    df = pd.DataFrame({'x': list(range(10)), 'y': [1] * 10})
+
+    a = StreamingDataFrame(example=df.iloc[:0])
+
+    L1 = a.groupby(a.x % 3).y.sum().stream.sink_to_list()
+    L2 = a.groupby(a.x % 3).sum().stream.sink_to_list()
+
+    a.emit(df.iloc[:3])
+    a.emit(df.iloc[3:7])
+    a.emit(df.iloc[7:])
+
+    assert assert_eq(L1[-1], df.groupby(df.x % 3).y.sum())
+    assert assert_eq(L2[-1], df.groupby(df.x % 3).sum())

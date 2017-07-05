@@ -1,3 +1,4 @@
+from functools import partial
 import operator
 
 import streams
@@ -13,6 +14,7 @@ class Streaming(object):
             example = pd.DataFrame({c: [] for c in columns})
         assert example is not None
         self.example = example
+        assert isinstance(self.example, self._subtype)
         self.stream = stream or Stream()
 
     def map_partitions(self, func, *args, **kwargs):
@@ -46,6 +48,9 @@ class Streaming(object):
     def __mul__(self, other):
         return self.map_partitions(operator.mul, other)
 
+    def __mod__(self, other):
+        return self.map_partitions(operator.mod, other)
+
     def emit(self, x):
         self.verify(x)
         self.stream.emit(x)
@@ -58,9 +63,7 @@ class Streaming(object):
 
 class StreamingFrame(Streaming):
     def sum(self):
-        def update(accumulator, new):
-            return accumulator + new.sum()
-        return self.accumulate_partitions(update, start=0)
+        return self.accumulate_partitions(_accumulate_sum, start=0)
 
 
 class StreamingDataFrame(StreamingFrame):
@@ -98,6 +101,10 @@ class StreamingDataFrame(StreamingFrame):
         return self.accumulate_partitions(_accumulate_mean, start=start,
                                           returns_state=True)
 
+    def groupby(self, other):
+        return StreamingSeriesGroupby(self, other)
+
+
 
 class StreamingSeries(StreamingFrame):
     _subtype = pd.Series
@@ -108,7 +115,6 @@ class StreamingSeries(StreamingFrame):
                                           returns_state=True)
 
 
-
 def _accumulate_mean(accumulator, new):
     accumulator = accumulator.copy()
     accumulator['sums'] += new.sum()
@@ -116,3 +122,51 @@ def _accumulate_mean(accumulator, new):
     result = accumulator['sums'] / accumulator['counts']
     return accumulator, result
 
+
+def _accumulate_sum(accumulator, new):
+    return accumulator + new.sum()
+
+
+class StreamingSeriesGroupby(object):
+    def __init__(self, root, grouper, index=None):
+        self.root = root
+        self.grouper = grouper
+        if index is None:
+            self.index = self.root.columns
+        else:
+            self.index = index
+
+    def __getitem__(self, index):
+        return StreamingSeriesGroupby(self.root, self.grouper, index)
+
+    def __getattr__(self, key):
+        if key in self.root.columns:
+            return self[key]
+        else:
+            raise AttributeError("StreamingSeriesGroupby has no attribute %r" % key)
+
+    def sum(self):
+        func = _accumulate_groupby_sum
+        if isinstance(self.grouper, Streaming):
+            func = partial(func, index=self.index)
+            example = self.root.example.groupby(self.grouper.example)[self.index].sum()
+            stream = self.root.stream.zip(self.grouper.stream)
+            stream = stream.accumulate(func, start=0)
+        else:
+            func = partial(func, grouper=self.grouper, index=self.index)
+            example = self.root.example.groupby(self.grouper.example)[self.index].sum()
+            stream = self.root.stream.accumulate(func, start=0)
+        if isinstance(example, pd.DataFrame):
+            return StreamingDataFrame(stream, example)
+        else:
+            return StreamingSeries(stream, example)
+
+
+def _accumulate_groupby_sum(accumulator, new, grouper=None, index=None):
+    if isinstance(new, tuple):  # zipped
+        assert grouper is None
+        new, grouper = new
+    g = new.groupby(grouper)
+    if index is not None:
+        g = g[index]
+    return accumulator + g.sum()
