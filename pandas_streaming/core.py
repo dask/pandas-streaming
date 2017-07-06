@@ -79,6 +79,9 @@ class StreamingFrame(Streaming):
     def sum(self):
         return self.accumulate_partitions(_accumulate_sum, start=0)
 
+    def round(self, decimals=0):
+        return self.map_partitions(M.round, decimals=decimals)
+
 
 class StreamingDataFrame(StreamingFrame):
     _subtype = pd.DataFrame
@@ -145,10 +148,7 @@ class StreamingSeriesGroupby(object):
     def __init__(self, root, grouper, index=None):
         self.root = root
         self.grouper = grouper
-        if index is None:
-            self.index = self.root.columns
-        else:
-            self.index = index
+        self.index = index
 
     def __getitem__(self, index):
         return StreamingSeriesGroupby(self.root, self.grouper, index)
@@ -164,12 +164,18 @@ class StreamingSeriesGroupby(object):
         start = 0
         if isinstance(self.grouper, Streaming):
             func = partial(func, index=self.index)
-            example = self.root.example.groupby(self.grouper.example)[self.index].sum()
+            example = self.root.example.groupby(self.grouper.example)
+            if self.index is not None:
+                example = example[self.index]
+            example = example.sum()
             stream = self.root.stream.zip(self.grouper.stream)
             stream = stream.accumulate(func, start=start)
         else:
             func = partial(func, grouper=self.grouper, index=self.index)
-            example = self.root.example.groupby(self.grouper.example)[self.index].sum()
+            example = self.root.example.groupby(self.grouper)
+            if self.index is not None:
+                example = example[self.index]
+            example = example.sum()
             stream = self.root.stream.accumulate(func, start=start)
         if isinstance(example, pd.DataFrame):
             return StreamingDataFrame(stream, example)
@@ -183,12 +189,18 @@ class StreamingSeriesGroupby(object):
         start = (0, 0)
         if isinstance(self.grouper, Streaming):
             func = partial(func, index=self.index)
-            example = self.root.example.groupby(self.grouper.example)[self.index].mean()
+            example = self.root.example.groupby(self.grouper.example)
+            if self.index is not None:
+                example = example[self.index]
+            example = example.mean()
             stream = self.root.stream.zip(self.grouper.stream)
             stream = stream.accumulate(func, start=start, returns_state=True)
         else:
             func = partial(func, grouper=self.grouper, index=self.index)
-            example = self.root.example.groupby(self.grouper.example)[self.index].sum()
+            example = self.root.example.groupby(self.grouper)
+            if self.index is not None:
+                example = example[self.index]
+            example = example.mean()
             stream = self.root.stream.accumulate(func, start=start,
                                                  returns_state=True)
         if isinstance(example, pd.DataFrame):
@@ -204,7 +216,10 @@ def _accumulate_groupby_sum(accumulator, new, grouper=None, index=None):
     g = new.groupby(grouper)
     if index is not None:
         g = g[index]
-    return accumulator + g.sum()
+    if isinstance(accumulator, int):
+        return g.sum()
+    else:
+        return accumulator.add(g.sum(), fill_value=0)
 
 
 def _accumulate_groupby_mean(accumulator, new, grouper=None, index=None):
@@ -216,6 +231,10 @@ def _accumulate_groupby_mean(accumulator, new, grouper=None, index=None):
         g = g[index]
 
     (sums, counts) = accumulator
-    sums = sums + g.sum()
-    counts = counts + g.count()
+    if isinstance(sums, int):  # first time
+        sums = g.sum()
+        counts = g.count()
+    else:
+        sums = sums.add(g.sum(), fill_value=0)
+        counts = counts.add(g.count(), fill_value=0)
     return (sums, counts), sums / counts

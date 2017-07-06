@@ -1,6 +1,7 @@
 from pandas_streaming import StreamingDataFrame, StreamingSeries
 import pytest
 from dask.dataframe.utils import assert_eq
+import numpy as np
 import pandas as pd
 
 
@@ -104,24 +105,29 @@ def test_pair_arithmetic():
 
 
 @pytest.mark.parametrize('agg', ['sum', 'mean'])
-def test_groupby_aggregate(agg):
-    df = pd.DataFrame({'x': list(range(10)), 'y': [1.0] * 10})
+@pytest.mark.parametrize('grouper', [lambda a: a.x % 3,
+                                     lambda a: 'x',
+                                     lambda a: ['x']])
+@pytest.mark.parametrize('indexer', [lambda g: g.y,
+                                     lambda g: g,
+                                     lambda g: g[['y']],
+                                     lambda g: g[['x', 'y']]])
+def test_groupby_aggregate(agg, grouper, indexer):
+    df = pd.DataFrame({'x': (np.arange(10) // 2).astype(float), 'y': [1.0] * 10})
 
     a = StreamingDataFrame(example=df.iloc[:0])
 
-    L1 = getattr(a.groupby(a.x % 3).y, agg)().stream.sink_to_list()
-    L2 = getattr(a.groupby(a.x % 3), agg)().stream.sink_to_list()
+    L = getattr(indexer(a.groupby(grouper(a))), agg)().stream.sink_to_list()
 
     a.emit(df.iloc[:3])
     a.emit(df.iloc[3:7])
     a.emit(df.iloc[7:])
 
-    assert assert_eq(L1[-1], getattr(df.groupby(df.x % 3).y, agg)())
-    assert assert_eq(L2[-1], getattr(df.groupby(df.x % 3), agg)())
+    assert assert_eq(L[-1], getattr(indexer(df.groupby(grouper(df))), agg)())
 
 
 def test_repr():
-    df = pd.DataFrame({'x': list(range(10)), 'y': [1.0] * 10})
+    df = pd.DataFrame({'x': (np.arange(10) // 2).astype(float), 'y': [1.0] * 10})
     a = StreamingDataFrame(example=df)
 
     text = repr(a)
