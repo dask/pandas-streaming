@@ -103,17 +103,18 @@ def test_pair_arithmetic():
     assert_eq(pd.concat(L, axis=0), (df.x + df.y) * 2)
 
 
-def test_groupby_sum():
-    df = pd.DataFrame({'x': list(range(10)), 'y': [1] * 10})
+@pytest.mark.parametrize('agg', ['sum', 'mean'])
+def test_groupby_aggregate(agg):
+    df = pd.DataFrame({'x': list(range(10)), 'y': [1.0] * 10})
 
     a = StreamingDataFrame(example=df.iloc[:0])
 
-    L1 = a.groupby(a.x % 3).y.sum().stream.sink_to_list()
-    L2 = a.groupby(a.x % 3).sum().stream.sink_to_list()
+    L1 = getattr(a.groupby(a.x % 3).y, agg)().stream.sink_to_list()
+    L2 = getattr(a.groupby(a.x % 3), agg)().stream.sink_to_list()
 
     a.emit(df.iloc[:3])
     a.emit(df.iloc[3:7])
     a.emit(df.iloc[7:])
 
-    assert assert_eq(L1[-1], df.groupby(df.x % 3).y.sum())
-    assert assert_eq(L2[-1], df.groupby(df.x % 3).sum())
+    assert assert_eq(L1[-1], getattr(df.groupby(df.x % 3).y, agg)())
+    assert assert_eq(L2[-1], getattr(df.groupby(df.x % 3), agg)())
