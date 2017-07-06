@@ -32,6 +32,8 @@ class Streaming(object):
         start = kwargs.pop('start', streams.core.no_default)
         returns_state = kwargs.pop('returns_state', False)
         example = func(start, self.example, *args, **kwargs)
+        if returns_state:
+            _, example = example
         stream = self.stream.accumulate(func, *args, start=start,
                 returns_state=returns_state, **kwargs)
 

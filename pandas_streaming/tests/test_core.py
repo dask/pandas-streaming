@@ -53,7 +53,10 @@ def test_sum():
 
 def test_mean():
     sdf = StreamingDataFrame(columns=['x', 'y'])
-    df_out = sdf.mean().stream.sink_to_list()
+    mean = sdf.mean()
+    assert isinstance(mean, StreamingSeries)
+    df_out = mean.stream.sink_to_list()
+
 
     x = sdf.x
     x_out = x.mean().stream.sink_to_list()
