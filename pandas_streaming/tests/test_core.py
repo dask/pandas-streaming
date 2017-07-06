@@ -38,7 +38,7 @@ def test_sum():
     df_out = sdf.sum().stream.sink_to_list()
 
     x = sdf.x
-    x_out = x.sum().stream.sink_to_list()
+    x_out = (x.sum() + 1).stream.sink_to_list()
 
     df = pd.DataFrame({'x': [1, 2, 3], 'y': [4, 5, 6]})
     sdf.emit(df)
@@ -47,8 +47,8 @@ def test_sum():
     assert assert_eq(df_out[0], df.sum())
     assert assert_eq(df_out[1], df.sum() + df.sum())
 
-    assert x_out[0] == df.x.sum()
-    assert x_out[1] == df.x.sum() + df.x.sum()
+    assert x_out[0] == df.x.sum() + 1
+    assert x_out[1] == df.x.sum() + df.x.sum() + 1
 
 
 def test_mean():

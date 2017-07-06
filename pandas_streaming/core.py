@@ -26,7 +26,7 @@ class Streaming(object):
         elif isinstance(example, pd.Series):
             return StreamingSeries(stream, example)
         else:
-            return StreamingScalar(stream, example)
+            return Streaming(stream, example)
 
     def accumulate_partitions(self, func, *args, **kwargs):
         start = kwargs.pop('start', streams.core.no_default)
