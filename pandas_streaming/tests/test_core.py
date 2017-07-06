@@ -118,3 +118,20 @@ def test_groupby_aggregate(agg):
 
     assert assert_eq(L1[-1], getattr(df.groupby(df.x % 3).y, agg)())
     assert assert_eq(L2[-1], getattr(df.groupby(df.x % 3), agg)())
+
+
+def test_repr():
+    df = pd.DataFrame({'x': list(range(10)), 'y': [1.0] * 10})
+    a = StreamingDataFrame(example=df)
+
+    text = repr(a)
+    assert type(a).__name__ in text
+    assert 'x' in text
+    assert 'y' in text
+
+    text = repr(a.x)
+    assert type(a.x).__name__ in text
+    assert 'x' in text
+
+    text = repr(a.x.sum())
+    assert type(a.x.sum()).__name__ in text

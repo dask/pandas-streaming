@@ -44,6 +44,12 @@ class Streaming(object):
         else:
             return Streaming(stream, example)
 
+    def __repr__(self):
+        example = self.example
+        if hasattr(example, 'head'):
+            example = example.head(2)
+        return "%s - elements like:\n%r" % (type(self).__name__, example)
+
     def __add__(self, other):
         return self.map_partitions(operator.add, other)
 
