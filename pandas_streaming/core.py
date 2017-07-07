@@ -18,7 +18,9 @@ class Streaming(object):
         self.stream = stream or Stream()
 
     def map_partitions(self, func, *args, **kwargs):
-        example = func(self.example, *args, **kwargs)
+        example = kwargs.pop('example', None)
+        if example is None:
+            example = func(self.example, *args, **kwargs)
         stream = self.stream.map(func, *args, **kwargs)
 
         if isinstance(example, pd.DataFrame):
@@ -31,7 +33,9 @@ class Streaming(object):
     def accumulate_partitions(self, func, *args, **kwargs):
         start = kwargs.pop('start', streams.core.no_default)
         returns_state = kwargs.pop('returns_state', False)
-        example = func(start, self.example, *args, **kwargs)
+        example = kwargs.pop('example', None)
+        if example is None:
+            example = func(start, self.example, *args, **kwargs)
         if returns_state:
             _, example = example
         stream = self.stream.accumulate(func, *args, start=start,
@@ -121,6 +125,30 @@ class StreamingDataFrame(StreamingFrame):
     def groupby(self, other):
         return StreamingSeriesGroupby(self, other)
 
+    def assign(self, **kwargs):
+        def concat(tup, columns=None):
+            result = pd.concat(tup, axis=1)
+            result.columns = columns
+            return result
+        columns, values = zip(*kwargs.items())
+        stream = self.stream.zip(*[v.stream for v in values])
+        stream = stream.map(concat, columns=list(self.columns) + list(columns))
+        example = self.example.assign(**{c: v.example for c, v in kwargs.items()})
+        return StreamingDataFrame(stream, example)
+
+    def __setitem__(self, key, value):
+        if isinstance(value, StreamingSeries):
+            result = self.assign(**{key: value})
+        elif isinstance(value, StreamingDataFrame):
+            result = self.assign(**{k: value[c] for k, c in zip(key, value.columns)})
+        else:
+            example = self.example.copy()
+            example[key] = value
+            result = self.map_partitions(pd.DataFrame.assign, **{key: value})
+
+        self.stream = result.stream
+        self.example = result.example
+        return self
 
 
 class StreamingSeries(StreamingFrame):

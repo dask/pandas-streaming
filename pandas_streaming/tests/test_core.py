@@ -141,3 +141,26 @@ def test_repr():
 
     text = repr(a.x.sum())
     assert type(a.x.sum()).__name__ in text
+
+
+def test_setitem():
+    df = pd.DataFrame({'x': list(range(10)), 'y': [1] * 10})
+
+    sdf = StreamingDataFrame(example=df.iloc[:0])
+    stream = sdf.stream
+
+    sdf['z'] = sdf['x'] * 2
+    sdf['a'] = 10
+    sdf[['c', 'd']] = sdf[['x', 'y']]
+
+    L = sdf.mean().stream.sink_to_list()
+
+    stream.emit(df.iloc[:3])
+    stream.emit(df.iloc[3:7])
+    stream.emit(df.iloc[7:])
+
+    df['z'] = df['x'] * 2
+    df['a'] = 10
+    df[['c', 'd']] = df[['x', 'y']]
+
+    assert_eq(L[-1], df.mean())
