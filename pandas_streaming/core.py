@@ -9,6 +9,7 @@ import pandas as pd
 
 class Streaming(object):
     _subtype = object
+
     def __init__(self, stream=None, example=None, columns=None):
         if columns is not None and example is None:
             example = pd.DataFrame({c: [] for c in columns})
@@ -89,6 +90,7 @@ class StreamingFrame(Streaming):
 
 class StreamingDataFrame(StreamingFrame):
     _subtype = pd.DataFrame
+
     @property
     def columns(self):
         return self.example.columns

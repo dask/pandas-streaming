@@ -58,7 +58,6 @@ def test_mean():
     assert isinstance(mean, StreamingSeries)
     df_out = mean.stream.sink_to_list()
 
-
     x = sdf.x
     x_out = x.mean().stream.sink_to_list()
 
