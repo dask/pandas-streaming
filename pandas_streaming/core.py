@@ -55,6 +55,17 @@ class Streaming(object):
             example = example.head(2)
         return "%s - elements like:\n%r" % (type(self).__name__, example)
 
+    def _repr_html_(self):
+        example = self.example
+        if hasattr(example, 'head'):
+            example = example.head(2)
+        try:
+            body = example._repr_html_()
+        except AttributeError:
+            body = repr(example)
+
+        return "<h3>%s - elements like<h3>\n%s" % (type(self).__name__, body)
+
     def __add__(self, other):
         return self.map_partitions(operator.add, other)
 

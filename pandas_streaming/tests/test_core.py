@@ -142,6 +142,16 @@ def test_repr():
     assert type(a.x.sum()).__name__ in text
 
 
+def test_repr_html():
+    df = pd.DataFrame({'x': (np.arange(10) // 2).astype(float), 'y': [1.0] * 10})
+    a = StreamingDataFrame(example=df)
+
+    for x in [a, a.y, a.y.mean()]:
+        html = x._repr_html_()
+        assert type(x).__name__ in html
+        assert '1.0' in html
+
+
 def test_setitem():
     df = pd.DataFrame({'x': list(range(10)), 'y': [1] * 10})
 
