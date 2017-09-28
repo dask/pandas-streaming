@@ -1,8 +1,8 @@
 from functools import partial
 import operator
 
-import streams
-from streams import Stream
+import streamz
+from streamz import Stream
 from dask.utils import M
 import pandas as pd
 
@@ -32,7 +32,7 @@ class Streaming(object):
             return Streaming(stream, example)
 
     def accumulate_partitions(self, func, *args, **kwargs):
-        start = kwargs.pop('start', streams.core.no_default)
+        start = kwargs.pop('start', streamz.core.no_default)
         returns_state = kwargs.pop('returns_state', False)
         example = kwargs.pop('example', None)
         if example is None:
@@ -64,7 +64,7 @@ class Streaming(object):
         except AttributeError:
             body = repr(example)
 
-        return "<h3>%s - elements like<h3>\n%s" % (type(self).__name__, body)
+        return "<h5>%s - elements like<h5>\n%s" % (type(self).__name__, body)
 
     def __add__(self, other):
         return self.map_partitions(operator.add, other)
@@ -89,6 +89,16 @@ class Streaming(object):
         if not isinstance(x, self._subtype):
             raise TypeError("Expected type %s, got type %s" %
                             (self._subtype, type(x)))
+
+    def rolling(self, window, min_periods=1):
+        if not isinstance(window, int):
+            window = pd.Timedelta(window)
+            min_periods = 1
+        stream = (self.stream
+                      .scan(_roll, window=window,
+                            min_periods=min_periods, returns_state=True)
+                      .filter(lambda x: len(x) >= min_periods))
+        return type(self)(stream=stream, example=self.example)
 
 
 class StreamingFrame(Streaming):
@@ -279,3 +289,15 @@ def _accumulate_groupby_mean(accumulator, new, grouper=None, index=None):
         sums = sums.add(g.sum(), fill_value=0)
         counts = counts.add(g.count(), fill_value=0)
     return (sums, counts), sums / counts
+
+
+def _roll(accumulator, new, window, min_periods):
+    accumulator = pd.concat([accumulator, new])
+    if isinstance(window, int):
+        accumulator = accumulator.iloc[-window:]
+    elif isinstance(window, pd.Timedelta):
+        accumulator = accumulator.loc[(accumulator.index.max() - window):]
+
+    out = accumulator if len(accumulator) >= min_periods else []
+    print(out)
+    return accumulator, out

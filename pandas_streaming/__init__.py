@@ -1,2 +1,2 @@
 from .core import StreamingDataFrame, StreamingSeries
-from streams import Stream
+from streamz import Stream

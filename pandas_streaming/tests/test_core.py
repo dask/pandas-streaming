@@ -1,8 +1,11 @@
+import time
+
 from pandas_streaming import StreamingDataFrame, StreamingSeries
 import pytest
 from dask.dataframe.utils import assert_eq
 import numpy as np
 import pandas as pd
+import pandas.util.testing as tm
 
 
 def test_identity():
@@ -173,3 +176,42 @@ def test_setitem():
     df[['c', 'd']] = df[['x', 'y']]
 
     assert_eq(L[-1], df.mean())
+
+
+def test_rolling():
+    df = pd.DataFrame({'x': [1, 2, 3], 'y': [4, 5, 6]})
+
+    sdf = StreamingDataFrame(example=df)
+    out = sdf.rolling(3, min_periods=2)
+    L = out.stream.sink_to_list()
+
+    for i in range(10):
+        df = pd.DataFrame({'x': [i], 'y': [i + 1]})
+        sdf.emit(df)
+
+    assert len(L) == 9
+    assert all(len(df) >= 2 for df in L)
+    for i, df in enumerate(L[1:]):
+        expected = pd.DataFrame({'x': [i, i + 1, i + 2],
+                                 'y': [i + 1, i + 2, i + 3]})
+        tm.assert_frame_equal(df.reset_index(drop=True), expected)
+
+
+def test_rolling_time():
+    now = pd.Timestamp.now()
+    df = pd.DataFrame({'x': [1], 'y': [4]},
+                      index=[now])
+
+    sdf = StreamingDataFrame(example=df)
+    L = sdf.rolling('10ms').stream.sink_to_list()
+
+    for i in range(100):
+        df = pd.DataFrame({'x': [i, i + 0.5], 'y': [i, i + 0.5]},
+                          index=[pd.Timestamp.now(), pd.Timestamp.now()])
+        sdf.emit(df)
+        time.sleep(0.001)
+
+    assert L
+    for df in L[3:]:
+        assert df.index.max() - df.index.min() < pd.Timedelta('10ms')
+        assert df.index.max() - df.index.min() > pd.Timedelta('1ms')
